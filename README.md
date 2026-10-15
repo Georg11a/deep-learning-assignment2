@@ -95,8 +95,22 @@ Code: `training/probe.py`; results: `model/probe_results.json`, `model/probe_int
 | False flip on U (prediction changes, emotion didn't) ↓ | 48.8% | 49.8% |
 | Mean latent cosine distance, C / U pairs | 0.43 / 0.34 | 0.40 / 0.32 |
 
-Changing only the words flips the prediction almost half the time and moves the latent slots nearly as far as
-changing the emotion: the representation is strongly driven by *what* is said, not only *how*.
+**Control (important).** These flip rates are *exactly* what a 55%-accurate classifier with independent errors
+would produce: shuffling the model's predictions among clips of the same speaker and emotion gives a false flip of
+48.8% and a strict correct flip of 30.7% — identical to the observed values. So the flip rates by themselves show
+only that the model is imperfect, **not** that it ignores emotional delivery. The more informative evidence is in
+the representation:
+
+| Latent-slot analysis (MFCC + prosody model, test speakers) | Value |
+|---|---|
+| Cosine distance: same speaker+sentence, different emotion (C) | 0.43 |
+| Cosine distance: same speaker+emotion, different sentence (U) | 0.34 |
+| Cosine distance: different speaker, same sentence+emotion | 0.41 |
+| Linear probe from latents → emotion / sentence / speaker (chance) | 55% (17%) / 55% (9%) / 54% (6%) |
+
+Changing the speaker moves the latent slots almost as much as changing the emotion, and the slots encode sentence
+and speaker identity about as decodably as emotion: the learned representation is entangled with *who* speaks and
+*what* is said, not only *how*. This is a known issue in speech emotion recognition (see related work below).
 
 **2. Perturbations.** Share of test predictions that change:
 
@@ -109,7 +123,7 @@ changing the emotion: the representation is strongly driven by *what* is said, n
 | Flatten pitch contour across segments | evidence removed | 5.6% | 0.0% |
 
 The model reacts more to recording level and noise than to removing pitch evidence — a small-model analogue
-of the paper's gap. The MFCC-only model is completely blind to pitch edits, which is why prosody features were
+of the paper's gap (with the caveat that the feature-level removals are milder edits than added noise). The MFCC-only model is completely blind to pitch edits, which is why prosody features were
 added (they also raise accuracy and strict correct flips).
 
 **3. Fixed-context segment interventions** (paper App. G.1 and J.2). Replacing the top-k segment slots ranked by
@@ -120,6 +134,13 @@ slots vs +3.5 / +8.1 / +20.5 pp for random slots; all 8 slots: +46.0 pp; an unre
 speaker, sentence and emotion): +0.1 pp. The segments the answer reads are load-bearing.
 
 ![pilot interventions](model/probe_interventions.png)
+
+**Related work.** That emotion models lean on lexical content or speaker identity is well studied, e.g.
+[probing SER transformers for linguistic knowledge](https://arxiv.org/abs/2204.00400) (Triantafyllopoulos et al., 2022),
+[lexical-dependent emotion detection](https://msp.utdallas.edu/publications/Lotfian_2015.pdf) (Lotfian & Busso, 2015), and,
+for audio LLMs, [emotionally incongruent speech](https://arxiv.org/abs/2510.25054) and
+[“Do audio LLMs really listen?”](https://arxiv.org/abs/2510.10444). This pilot does not claim a new finding about SER;
+it is a course-scale exercise in transferring ReaLVR's latent-evidence diagnostics to a speech model.
 
 **Differences from the paper and limitations.** (a) With a linear read-out, ReaLVR's "answer contrast"
 ranking (correct minus wrong-answer read-out) is almost identical to ranking by the raw correct-answer

@@ -48,8 +48,9 @@ Show: change activation to gelu, layers to 2 → Start → curves grow live → 
 ## 2:25–2:50 — Pilot: does it listen to the right evidence?（Pilot 发现）
 
 "Finally a pilot inspired by a 2026 paper on latent reasoning in vision-language models. Using the same sentence
-spoken with different emotions as natural counterfactuals: when only the words change, the prediction still flips
-almost half the time; and noise or volume changes move the model more than removing pitch. But the segments the
+spoken with different emotions as natural counterfactuals. A shuffle control shows the raw flip rates are what any
+55%-accurate model would give, but the latent slots encode who is speaking and what is said about as well as the
+emotion, and noise or volume changes move the model more than removing pitch. But the segments the
 model reads really are load-bearing — swapping just one of them transfers the other emotion three times more than a
 random one. So the model learns emotion, but it is also listening to things it shouldn't."
 

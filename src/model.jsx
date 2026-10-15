@@ -230,7 +230,7 @@ function PilotResults() {
             ['latent_distance_C', 'Latent distance, C pairs'], ['latent_distance_U', 'Latent distance, U pairs']].map(([k, name]) =>
             <tr key={k}><td>{name}</td>{models.map(m => <td key={m}>{k.startsWith('latent') ? r.paired[m][k].toFixed(3) : pct(r.paired[m][k])}</td>)}</tr>)}
         </tbody></table>
-        <p className="small">Changing only the sentence flips the prediction almost half the time, and moves the latent slots nearly as far as changing the emotion.</p></div>
+        <p className="small">Caution: these flip rates equal what a 55%-accurate model with independent errors would give (shuffle control: 48.8% / 30.7%). Latent slots, however, encode speaker and sentence about as well as emotion.</p></div>
       <div><h3>2 · Perturbations</h3>
         <p className="muted small">Share of test predictions that change. Nuisance edits should not matter; evidence edits remove prosodic cues.</p>
         <table className="data"><thead><tr><th>Edit</th><th>Type</th>{models.map(m => <th key={m}>{label[m] || m}</th>)}</tr></thead><tbody>
