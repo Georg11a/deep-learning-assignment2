@@ -31,6 +31,8 @@ class Predictor:
         self.fidx = ck.get('feature_idx', list(range(F.D)))
         self.classes = ck['classes']
         self.config = cfg
+        zbar = ck.get('train_mean_slots')
+        self.train_mean_slots = torch.as_tensor(zbar) if zbar is not None else torch.zeros(arch['k'], cfg['latent'])
 
     def standardise(self, X):
         """Raw (N, K, 88) features -> standardised model inputs (N, K, d_in)."""

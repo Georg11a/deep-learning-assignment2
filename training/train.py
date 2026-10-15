@@ -154,10 +154,18 @@ def train(config=None, on_epoch=None, should_stop=None, save=True, out_dir=MODEL
         if split == 'test':
             results['test']['confusion'] = confusion_matrix(T[split][1].numpy(), pred,
                                                             labels=range(len(EMOTIONS))).tolist()
-    results['baselines'] = shallow_baselines(Xs, y, idx)
+    model.eval()
+    with torch.no_grad():   # mean latent slot over training clips: the 'neutral' replacement for probes
+        results_zbar = model.encode(Xtr).mean(0).numpy()
+    cache = ROOT / 'data' / f"baselines_{cfg['feature_set']}.json"   # fixed split -> reusable
+    if cache.exists():
+        results['baselines'] = json.loads(cache.read_text())
+    else:
+        results['baselines'] = shallow_baselines(Xs, y, idx)
+        cache.write_text(json.dumps(results['baselines']))
     results['classes'] = EMOTIONS
     if save:
-        save_model(model, cfg, mean, std, results, out_dir, fidx)
+        save_model(model, cfg, mean, std, results, out_dir, fidx, results_zbar)
     return model, results
 
 
@@ -180,12 +188,13 @@ def shallow_baselines(Xs, y, idx):
     return out
 
 
-def save_model(model, cfg, mean, std, results, out_dir=MODEL_DIR, fidx=None):
+def save_model(model, cfg, mean, std, results, out_dir=MODEL_DIR, fidx=None, zbar=None):
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     torch.save({'state_dict': model.state_dict(), 'config': cfg, 'mean': mean, 'std': std,
                 'classes': EMOTIONS, 'feature_names': FEATURE_NAMES,
                 'feature_idx': fidx if fidx is not None else list(range(len(FEATURE_NAMES))),
+                'train_mean_slots': zbar,
                 'arch': dict(d_in=model.encoder[0].in_features, k=model.k, n_classes=model.n_classes)},
                out_dir / 'segment_mlp.pt')
     (out_dir / 'metrics.json').write_text(json.dumps(results, indent=1))
