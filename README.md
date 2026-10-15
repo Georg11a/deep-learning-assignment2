@@ -179,7 +179,16 @@ later runs, including the in-app ones, take about 20 seconds.
 Development mode: `python3 server.py` in one terminal and `npm run dev` in another (http://127.0.0.1:5173;
 Vite forwards `/api`). Tests: `python3 -m unittest`.
 
-The public GitHub Pages build of HW1 is static and cannot run Python, so the model features require the local server.
+### Public demo (GitHub Pages)
+
+**https://georg11a.github.io/deep-learning-assignment2/** — no installation needed. Pages cannot run Python, so the
+public site runs the trained SegmentMLP **in the browser**: `scripts/export_static.py` exports the weights, the input
+standardisation and the segment features of the 15 bundled clips to `public/static/`, and `src/browserModel.js`
+re-implements the forward pass (checked against PyTorch: identical predictions, max probability difference 6e-5).
+Prediction, the evidence strip, the evidence probe, the saved training curves, test metrics and the pilot results all
+work there; live training and predicting your own imported audio need the local server. The site is built and
+deployed by `.github/workflows/pages.yml` on every push to `main` (repository Settings → Pages → Source:
+**GitHub Actions**). After re-training, run `python3 scripts/export_static.py` and push to update the public model.
 
 ## Implementation overview
 
@@ -193,6 +202,8 @@ The public GitHub Pages build of HW1 is static and cannot run Python, so the mod
 | `model_api.py` | Model service for the server: prediction, background training jobs, probes |
 | `server.py` | Standard-library HTTP server: SQLite annotations (HW1), model endpoints, static app |
 | `src/main.jsx` | HW1 workspace, now hosting the prediction panel and the Model & training tab |
+| `src/browserModel.js` | In-browser SegmentMLP inference and evidence probe for the public (Pages) demo |
+| `scripts/export_static.py` | Exports weights, clip features, metrics and pilot results to `public/static/` |
 | `src/model.jsx` | Prediction panel, evidence strip and probe, training controls, live charts, confusion matrix, pilot tables |
 
 API: `POST /api/predict` (JSON `{sourceId}` or raw audio bytes), `POST /api/train`, `GET /api/train/status`,
@@ -226,4 +237,5 @@ results and am responsible for explaining the model and code.
 ## Submission
 
 * Repository: https://github.com/Georg11a/deep-learning-assignment2
+* Public demo: https://georg11a.github.io/deep-learning-assignment2/
 * Demo video (≤ 3 min): outline in `docs/DEMO_SCRIPT_HW2.md` — add the video link here when recorded.

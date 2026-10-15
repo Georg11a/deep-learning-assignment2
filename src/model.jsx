@@ -1,6 +1,9 @@
 // HW2 model panels: prediction, evidence probe, interactive training + live monitor, pilot results.
-// All model work happens in the local Python server (server.py -> model_api.py).
+// With the local Python server (server.py -> model_api.py) everything runs server-side.
+// Without it (e.g. GitHub Pages) the trained model runs in the browser (browserModel.js) on the
+// bundled clips; only live training and imported audio need the server.
 import React, {useState, useEffect, useRef} from 'react';
+import {loadStatic, staticPredict, staticProbe} from './browserModel.js';
 
 const SERIES = {train: '#3987e5', val: '#d95926'};   // validated dark-surface categorical pair
 const SEQ = '#3987e5';                                 // single-hue sequential (bars, heat)
@@ -14,14 +17,28 @@ async function api(path, options) {
 }
 const post = (path, data) => api(path, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data)});
 
+// Decide once whether the Python model server is reachable.
+let backend = null;
+export function getBackend() {
+  if (!backend) backend = fetch('/api/health').then(r => r.ok ? r.json() : null).then(x => x?.model ? 'server' : 'browser').catch(() => 'browser');
+  return backend;
+}
+const SERVER_ONLY = 'This needs the local Python server — clone the repo and run python3 server.py (see README).';
+
 export function useModelInfo() {
   const [info, setInfo] = useState(null), [error, setError] = useState('');
-  const refresh = () => api('/api/model/info').then(x => {setInfo(x); setError('')}).catch(e => setError(e.message));
+  const refresh = () => getBackend()
+    .then(b => b === 'server' ? api('/api/model/info') : loadStatic().then(s => ({...s.metrics, mode: 'browser'})))
+    .then(x => {setInfo(x); setError('')}).catch(e => setError(e.message));
   useEffect(() => {refresh()}, []);
   return {info, error, refresh};
 }
 
 async function predictClip(clip) {
+  if (await getBackend() === 'browser') {
+    if (clip.source !== 'CREMA-D') throw Error('Predicting imported audio: ' + SERVER_ONLY);
+    return staticPredict(clip.sourceId);
+  }
   if (clip.source === 'CREMA-D') return post('/api/predict', {sourceId: clip.sourceId});
   const blob = await (await fetch(clip.url)).blob();          // imported local file: upload the bytes
   return api('/api/predict', {method: 'POST', headers: {'Content-Type': blob.type || 'audio/wav'}, body: blob});
@@ -110,7 +127,7 @@ export function PredictPanel({clip, duration, onSeek, reveal, perceived, peers, 
   const run = () => {setBusy(true); setError(''); predictClip(clip).then(setResult).catch(e => setError(e.message)).finally(() => setBusy(false))};
   useEffect(() => {setResult(null); setError(''); if (modelInfo?.available) run()}, [clip.id, modelInfo?.active]);
   return <article className="panel model-panel">
-    <div className="section-label">06 / MODEL PREDICTION <span>SegmentMLP · {modelInfo?.active === 'default' ? 'default model' : `run ${modelInfo?.active || '—'}`}</span></div>
+    <div className="section-label">06 / MODEL PREDICTION <span>SegmentMLP · {modelInfo?.mode === 'browser' ? 'running in your browser' : modelInfo?.active === 'default' ? 'default model' : `run ${modelInfo?.active || '—'}`}</span></div>
     {!result && !error && <p className="muted">{busy ? 'Running the model…' : 'Start the local server to get predictions.'}</p>}
     {error && <p className="error" role="alert">{error}</p>}
     {result && <>
@@ -133,7 +150,7 @@ function EvidenceProbe({clip, base, peers, reveal}) {
   const [k, setK] = useState(2), [ranking, setRanking] = useState('contrast'), [donor, setDonor] = useState(''),
     [segs, setSegs] = useState(order.slice(0, 2)), [out, setOut] = useState(null), [error, setError] = useState('');
   useEffect(() => {setOut(null); setDonor(''); setSegs(order.slice(0, 2))}, [clip.id]);
-  const go = req => post('/api/probe', {sourceId: clip.sourceId, ...req}).then(r => {setOut({...r, req}); setError('')}).catch(e => setError(e.message));
+  const go = req => getBackend().then(b => b === 'server' ? post('/api/probe', {sourceId: clip.sourceId, ...req}) : staticProbe({sourceId: clip.sourceId, ...req})).then(r => {setOut({...r, req}); setError('')}).catch(e => setError(e.message));
   return <details className="probe"><summary>Evidence probe · which segments does the answer depend on?</summary>
     <div className="probe-row"><strong>Replace</strong> the top
       <input type="number" min="0" max="8" value={k} onChange={e => setK(+e.target.value)}/> segments ranked by
@@ -168,16 +185,18 @@ export function ModelTab({info, refresh}) {
     }).catch(e => setError(e.message));
   }
   function start() {
+    if (browserMode) return setError('Live training: ' + SERVER_ONLY);
     setError(''); setMsg(''); setHistory([]); since.current = 0;
     post('/api/train', cfg).then(() => poll()).catch(e => setError(e.message));
   }
   const running = job?.state === 'running', res = job?.results;
-  const current = info?.available ? info : null;
+  const current = info?.available ? info : null, browserMode = info?.mode === 'browser';
   const shownHistory = job ? history : (current?.history || []);
   const baseline = (res || current)?.baselines?.logreg_concat?.val_acc;
   return <main className="model-view">
     <section className="panel train-controls">
       <div className="section-label">TRAIN A MODEL <span>runs on the local server</span></div>
+      {browserMode && <p className="notice">You are viewing the public demo. The trained model runs in your browser for predictions and the evidence probe; live training needs the local Python server (see README). Saved curves and results from the training run are shown on the right.</p>}
       <label>Learning rate<select value={cfg.lr} onChange={e => set('lr', +e.target.value)}>{LRS.map(v => <option key={v} value={v}>{v}</option>)}</select></label>
       <label>Epochs <output>{cfg.epochs}</output><input type="range" min="5" max="120" step="5" value={cfg.epochs} onChange={e => set('epochs', +e.target.value)}/></label>
       <label>Hidden units <output>{cfg.hidden}</output><input type="range" min="16" max="512" step="16" value={cfg.hidden} onChange={e => set('hidden', +e.target.value)}/></label>
@@ -185,7 +204,7 @@ export function ModelTab({info, refresh}) {
       <label>Activation<select value={cfg.activation} onChange={e => set('activation', e.target.value)}>{['relu', 'gelu', 'tanh', 'sigmoid'].map(a => <option key={a}>{a}</option>)}</select></label>
       <label>Dropout <output>{cfg.dropout.toFixed(1)}</output><input type="range" min="0" max="0.8" step="0.1" value={cfg.dropout} onChange={e => set('dropout', +e.target.value)}/></label>
       <label>Input features<select value={cfg.feature_set} onChange={e => set('feature_set', e.target.value)}><option value="all">MFCC + prosody (pitch, energy)</option><option value="mfcc">MFCC only (ablation)</option></select></label>
-      <div className="row-buttons"><button className="primary" disabled={running} onClick={start}>{running ? 'Training…' : '▶ Start training'}</button>
+      <div className="row-buttons"><button className="primary" disabled={running || browserMode} onClick={start}>{running ? 'Training…' : '▶ Start training'}</button>
         {running && <button onClick={() => post('/api/train/stop', {}).catch(e => setError(e.message))}>■ Stop</button>}</div>
       {job && <p className="muted small">Run {job.id} · {job.state} · epoch {job.epochs_done}/{job.config.epochs || '—'} · {job.elapsed}s</p>}
       {error && <p className="error" role="alert">{error}</p>}
@@ -212,7 +231,7 @@ export function ModelTab({info, refresh}) {
 
 function PilotResults() {
   const [r, setR] = useState(null), [error, setError] = useState('');
-  useEffect(() => {api('/api/probe/summary').then(setR).catch(e => setError(e.message))}, []);
+  useEffect(() => {getBackend().then(b => b === 'server' ? api('/api/probe/summary') : loadStatic().then(s => s.pilot)).then(setR).catch(e => setError(e.message))}, []);
   if (error) return <section className="panel pilot"><div className="section-label">PILOT STUDY</div><p className="muted">{error}</p></section>;
   if (!r) return null;
   const models = Object.keys(r.paired), label = {all: 'MFCC + prosody', mfcc_only: 'MFCC only'};
